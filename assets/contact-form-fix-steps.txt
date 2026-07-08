@@ -1,0 +1,193 @@
+====================================================================
+ACUMELT.COM - CONTACT FORM + WORDPRESS FIX
+STEP-BY-STEP CHANGE LIST
+====================================================================
+
+ROOT CAUSE SUMMARY
+--------------------
+1. WordPress ka front controller file "index.php" ka naam badal kar
+   "1index1.php" ho gaya hai -> WordPress site load hi nahi ho raha.
+   Sirf React (Vite) build serve ho raha hai.
+
+2. React Contact page ka form kisi bhi backend se connect nahi hai.
+   Form ka onSubmit sirf preventDefault() call karta hai - koi
+   fetch/axios/API call hai hi nahi. Isliye SEND MESSAGE button
+   click karne par kuch hota nahi.
+
+3. Koi malware / injected script nahi mila (directfwd, jsinit,
+   jspark - sab clean).
+
+
+====================================================================
+STEP 1: WORDPRESS KO WAPAS CHALU KARO
+====================================================================
+File location : root folder (site ka main directory)
+File name     : 1index1.php
+
+ACTION:
+- Is file ka naam badal kar wapas "index.php" karo.
+
+Command (agar terminal/FTP access hai):
+    mv 1index1.php index.php
+
+Ya FTP/File Manager (cPanel) me:
+    1index1.php  --> Rename --> index.php
+
+CHECK AFTER THIS STEP:
+- Site ka "/" abhi bhi React app dikhayega (normal hai)
+- wp-admin (/wp-admin) ab open hona chahiye
+- wp-login.php se login test karo
+
+
+====================================================================
+STEP 2: CONTACT FORM 7 - NAYA FORM BANAO (wp-admin ke andar)
+====================================================================
+Koi file edit nahi karni - yeh WordPress dashboard se hota hai.
+
+ACTION:
+1. wp-admin me login karo (Step 1 ke baad hi possible hai)
+2. Left menu me "Contact" -> "Add New" par click karo
+3. Form banao in fields ke saath:
+      - your-name
+      - your-email
+      - your-subject
+      - your-message
+4. "Save" karo
+5. URL me dekho form ka ID number
+   (example: wp-admin/admin.php?page=wpcf7&post=123 -> ID = 123)
+   *** YEH ID NUMBER STEP 3 ME USE HOGA ***
+
+OPTIONAL (recommended):
+- "wpcf7-recaptcha" plugin already installed hai - isko is form
+  ke saath enable kar do spam rokne ke liye.
+
+
+====================================================================
+STEP 3: REACT CONTACT COMPONENT ME CODE CHANGE
+====================================================================
+File location : /assets/Contact-BuD6ePl4.js
+(agar original source code available hai to uski jagah:
+ src/pages/Contact.jsx  -- isme edit karna zyada easy hoga)
+
+CHANGE 1 - Har input field ko "controlled" banao:
+   Pehle:
+      <input type="text" placeholder="John Doe" className="..." />
+
+   Badal kar:
+      <input
+        type="text"
+        placeholder="John Doe"
+        className="..."
+        value={formData.name}
+        onChange={(e) => setFormData({...formData, name: e.target.value})}
+      />
+
+   (Yeh Full Name, Email, Subject, Message - char fields me karna hai)
+
+CHANGE 2 - Form ke upar state add karo (component ke start me):
+      const [formData, setFormData] = useState({
+        name: "",
+        email: "",
+        subject: "",
+        message: ""
+      });
+      const [status, setStatus] = useState("idle");
+      // status values: idle | sending | success | error
+
+CHANGE 3 - onSubmit function badlo:
+   Pehle:
+      onSubmit={t => t.preventDefault()}
+
+   Badal kar:
+      onSubmit={handleSubmit}
+
+   Aur yeh function add karo:
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setStatus("sending");
+
+        const data = new FormData();
+        data.append("your-name", formData.name);
+        data.append("your-email", formData.email);
+        data.append("your-subject", formData.subject);
+        data.append("your-message", formData.message);
+
+        try {
+          const res = await fetch(
+            "https://acumelt.com/wp-json/contact-form-7/v1/contact-forms/123/feedback",
+            { method: "POST", body: data }
+          );
+          const result = await res.json();
+          setStatus(result.status === "mail_sent" ? "success" : "error");
+        } catch (err) {
+          setStatus("error");
+        }
+      };
+
+   *** "123" ko Step 2 me mile hue actual Form ID se replace karo ***
+
+CHANGE 4 - Button me loading/success state dikhao (UI same rahega):
+      <button disabled={status === "sending"}>
+        {status === "sending" ? "SENDING..." : "SEND MESSAGE"}
+      </button>
+
+   Aur form ke neeche success/error message dikha sakte ho:
+      {status === "success" && <p>Message sent successfully!</p>}
+      {status === "error" && <p>Something went wrong. Try again.</p>}
+
+
+====================================================================
+STEP 4: REBUILD AUR DEPLOY
+====================================================================
+(Sirf agar tumhare paas original Vite project source hai)
+
+ACTION:
+1. Terminal me project folder me jao
+2. Run karo:
+      npm install
+      npm run build
+3. Naya "dist" (ya "build") folder banega jisme naya:
+      - index.html
+      - assets/*.js
+      - assets/*.css
+   milega
+4. Sirf yeh naya "assets" folder + "index.html" server par
+   upload karo (purani assets files replace kar do)
+
+*** AGAR ORIGINAL SOURCE CODE NAHI HAI ***
+Batao mujhe - main directly minified file
+"assets/Contact-BuD6ePl4.js" ke andar hi patch kar sakta hoon
+bina rebuild kiye, taaki turant kaam chal jaye.
+
+
+====================================================================
+STEP 5: WP MAIL SMTP CHECK KARO
+====================================================================
+Koi file edit nahi - dashboard se check karna hai.
+
+ACTION:
+1. wp-admin -> Settings -> WP Mail SMTP
+2. Confirm karo SMTP settings already sahi configured hain
+   (From email, SMTP host, port, username - already set hona
+   chahiye kyunki plugin already installed hai)
+3. "Email Test" tab se ek test email bhejo confirm karne ke liye
+
+
+====================================================================
+FINAL FILE CHANGE SUMMARY (SIRF 2 FILES DIRECTLY EDIT HOTI HAIN)
+====================================================================
+
+1) 1index1.php  --> RENAME to --> index.php
+   (Root folder)
+
+2) assets/Contact-BuD6ePl4.js   (ya src/pages/Contact.jsx)
+   (Form ko state + fetch() se Contact Form 7 REST API se connect
+    karna hai)
+
+Baaki sab kaam (CF7 form banana, SMTP check, reCAPTCHA enable)
+WordPress admin dashboard se hota hai - koi file edit nahi karni.
+
+====================================================================
+END OF FILE
+====================================================================
